@@ -39,6 +39,7 @@ for i in 0..num {
     if let Some(task) = target.steal.steal_into(&mut self.run_queue) {
         return Some(task);
 ```
+[link](https://github.com/tokio-rs/tokio/blob/a5ee2f0d3d78daa01e2c6c12d22b82474dc5c32a/tokio/src/runtime/thread_pool/worker.rs#L447)
 
 可以看到，Worker 会从多个地方取 task，按顺序依次是：
 
@@ -51,7 +52,7 @@ for i in 0..num {
 4. 从其他 worker 的 queue(remotes) 中 steal 任务
 
 ![](./assets/03_scheduler.png)
-[https://excalidraw.com/#json=4729047296770048,XgEpCO1t7wCLne3H8sStnA](https://excalidraw.com/#json=4729047296770048,XgEpCO1t7wCLne3H8sStnA)
+[link](https://excalidraw.com/#json=4729047296770048,XgEpCO1t7wCLne3H8sStnA)
 
 Global queue 肯定需要，但如果只有一个 global queue，每个 worker 从其中取 task 时，都需要加锁，会影响性能。因此给每个 worker 增加自己的 local queue 是很自然的选择，worker 可以优先从自己的 local queue 中取任务。
 
@@ -71,22 +72,22 @@ LIFO 可以带来更好的性能，但也会牺牲公平性，因此 LIFO slot �
 
 如果一个 task 执行很久，最坏情况是进入了死循环，那当前 worker 的 queue 中的 tasks 就要等待更长时间才能得到执行，甚至是一直不会被执行。我们知道，目前 Rust runtime 中无法抢占式调度（preempt）这样的 task，主要还是需要开发者自己进行代码“协同”。
 
-但 Tokio 也有机制来改善这类问题，比如在 #6 见过的 `[coop](https://github.com/tokio-rs/tokio/blob/a5ee2f0d3d78daa01e2c6c12d22b82474dc5c32a/tokio/src/coop.rs#L3)` module，在 task 运行之前会调用
+但 Tokio 也有机制来改善这类问题，比如在 [2.5](./02_worker_thread_2.md) 见过的 [`coop`](https://github.com/tokio-rs/tokio/blob/a5ee2f0d3d78daa01e2c6c12d22b82474dc5c32a/tokio/src/coop.rs#L3) module，在 task 运行之前会调用
 
 ```rust
 coop::budget(|| {
 })
 ```
 
-它会创建一个 thread local 的 counter，目前初始值是 128。调用 `coop::poll_proceed` 会把 counter 减 1，当减小到 0 时，就会返回 Pending。而 Tokio 中在 poll 之前都会先调用 `coop::poll_proceed` 来判断是否超过 budget，如果超过，就会直接返回而不会调用实际的 poll。比如 #6 中提过的 `poll_ready` 以及 `mpsc` recv 等方法里都调用了它。
+它会创建一个 thread local 的 counter，目前初始值是 128。调用 `coop::poll_proceed` 会把 counter 减 1，当减小到 0 时，就会返回 Pending。而 Tokio 中在 poll 之前都会先调用 `coop::poll_proceed` 来判断是否超过 budget，如果超过，就会直接返回而不会调用实际的 poll。比如 [2.5](./02_worker_thread_2.md) 中提过的 `poll_ready` 以及 [`tokio mpsc`](https://docs.rs/tokio/0.1.16/tokio/sync/mpsc/index.html) recv 等方法里都调用了它。
 
-不过即便是有 `coop` ，如果是纯 CPU 的计算，Tokio 没办法了，当然这种还是用 `tokio::task::spawn_blocking` 比较好。
+不过即便是有 `coop` ，如果是纯 CPU 的计算，Tokio 没办法了。当然这种还是用 [`tokio::task::spawn_blocking`](https://docs.rs/tokio/0.2.22/tokio/task/fn.spawn_blocking.html) 比较好。
 
 ### Global queue 中的任务被饿死
 
 因为 local queue 中任务的优先级比 global queue 要高，如果一个 task 一直没有执行结束，比如一个 TCP server 的连接不停有新的数据从 client 发过来，于是它不停被挂起、放在队列、运行，这样 global queue 的任务就一直得不到运行。
 
-Tokio 会用 worker 的 tick（和 #7 的 tick 不同）来记录 worker 在循环中运行的次数，在运行 task 或者 park 之前就会把 tick 加 1。而当取 task 时，就会判断是否运行了一定次数，是的话，就会从先从 global queue 中取 task 来运行，其实就是本章第一段代码。`GLOBAL_POLL_INTERVAL` 目前取值是 61，是[从 Go 中 copy 来的](https://github.com/tokio-rs/tokio/blob/a5ee2f0d3d78daa01e2c6c12d22b82474dc5c32a/tokio/src/runtime/thread_pool/worker.rs#L273)。
+Tokio 会用 worker 的 tick（和 [3.1](./03_slab_token_readiness.md) 的 driver tick 不同）来记录 worker 在循环中运行的次数，在运行 task 或者 park 之前就会把 tick 加 1。而当取 task 时，就会判断是否运行了一定次数，是的话，就会从先从 global queue 中取 task 来运行，其实就是本章第一段代码。`GLOBAL_POLL_INTERVAL` 目前取值是 61，是[从 Go 中 copy 来的](https://github.com/tokio-rs/tokio/blob/a5ee2f0d3d78daa01e2c6c12d22b82474dc5c32a/tokio/src/runtime/thread_pool/worker.rs#L273)。
 
 ```rust
 fn next_task(&mut self, worker: &Worker) -> Option<Notified> {
@@ -128,10 +129,11 @@ coop::budget(|| {
     }
 })
 ```
+[link](https://github.com/tokio-rs/tokio/blob/a5ee2f0d3d78daa01e2c6c12d22b82474dc5c32a/tokio/src/runtime/thread_pool/worker.rs#L348)
 
 一个任务执行后，不会回到之前的 `next_task`的地方，而是直接看 LIFO slot 中是否有任务可以执行，有就执行 LIFO slot 任务，没有就返回。但这个逻辑是放在一个 `coop::budget` 调用里的，当没有剩余 budget 时，就把 LIFO 的任务放到 run queue 末尾，从而避免了一直循环执行这两个 LIFO slot 的任务。
 
-### event poll 被饿死
+### Event poll 被饿死
 
 之前说过 Tokio 的 worker 会优先执行 run queue 中的 tasks，当没有任务可执行时，会在 `park`中 poll events。问题很明显，如果 run queue 一直没有执行完，就不会 poll events。Tokio 用了和 Global queue 饿死问题一样的方案，在取 task 之前，会在 `maintenance` 里先判断 worker 的 tick 是否运行了 `GLOBAL_POLL_INTERVAL` 次，是的话就强制 `park`。
 

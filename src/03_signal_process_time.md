@@ -2,11 +2,12 @@
 
 我们之前在讲 Tokio runtime 的时候为了简化，特地关掉了 [`time`](https://docs.rs/tokio/1.7.1/tokio/time/index.html), [`process`](https://docs.rs/tokio/1.7.1/tokio/process/index.html) 和 [`signal`](https://docs.rs/tokio/1.7.1/tokio/signal/index.html) 这三个 feature，现在来讲一下，他们分别对应三个 module，用来处理异步的时间、进程管理和信号处理。
 
-还记得在 #2 中讲过的 `runtime::driver::Driver` 吗？它被用来创建 `runtime::Parker`，并且在 #5 中当 worker 没有 task 要处理而 poll events 时就会调用 `Parker` 的 [`park` 方法](https://github.com/tokio-rs/tokio/blob/a5ee2f0d3d78daa01e2c6c12d22b82474dc5c32a/tokio/src/runtime/park.rs#L92)，在其中会进一步调用 `driver` 的 `park`:
+还记得在 [2.1](./02_boostrap.md) 中讲过的 `runtime::driver::Driver` 吗？它被用来创建 `runtime::Parker`，并且在 [2.4](./02_worker_thread_1.md) 中当 worker 没有 task 要处理而 poll events 时就会调用 `Parker` 的 [`park` 方法](https://github.com/tokio-rs/tokio/blob/a5ee2f0d3d78daa01e2c6c12d22b82474dc5c32a/tokio/src/runtime/park.rs#L92)，在其中会进一步调用 `driver` 的 `park`:
 
 ```rust
 driver.park()
 ```
+[link](https://github.com/tokio-rs/tokio/blob/a5ee2f0d3d78daa01e2c6c12d22b82474dc5c32a/tokio/src/runtime/park.rs#L136)
 
 这个 driver 就是 `runtime::driver::Driver`，之前只是把它当做 `io::driver::Driver`来讲，但如果开了 `time`, `process` 和 `signal` 这三个 feature 后，Driver 其实是一个嵌套的结构：
 
@@ -26,23 +27,23 @@ runtime::driver::Driver {
 
 ```rust
 impl Park for runtime::Driver::Driver {
-		fn park(&mut self) -> Result<(), Self::Error> {
+    fn park(&mut self) -> Result<(), Self::Error> {
         self.inner.park()      // call time driver's park
     }
 }
 
 impl<P> Park for time::driver::Driver<P> {
-		fn park(&mut self) -> Result<(), Self::Error> {
-				// ... preprocess for time
-				// may call self.park.park_timeout(duration)?;
-				self.park.park()?;     // call process driver's park
+    fn park(&mut self) -> Result<(), Self::Error> {
+        // ... preprocess for time
+        // may call self.park.park_timeout(duration)?;
+        self.park.park()?;     // call process driver's park
 
-				self.handle.process();
+        self.handle.process();
     }
 }
 
 impl Park for process::unix::driver::Driver {
-		fn park(&mut self) -> Result<(), Self::Error> {
+    fn park(&mut self) -> Result<(), Self::Error> {
         self.park.park()?;      // call signal driver's park
         self.inner.process();
         Ok(())
@@ -50,7 +51,7 @@ impl Park for process::unix::driver::Driver {
 }
 
 impl Park for signal::unix::driver::Driver {
-		fn park(&mut self) -> Result<(), Self::Error> {
+    fn park(&mut self) -> Result<(), Self::Error> {
         self.park.park()?;      // call io driver's park
         self.process();
         Ok(())
@@ -58,7 +59,7 @@ impl Park for signal::unix::driver::Driver {
 }
 
 impl Park for io::Driver {
-		fn park(&mut self) -> io::Result<()> {
+    fn park(&mut self) -> io::Result<()> {
         self.turn(None)?;
         Ok(())
     }
@@ -84,6 +85,7 @@ let receiver = PollEvented::new_with_interest_and_handle(
     park.handle(),
 )?;
 ```
+[link](https://github.com/tokio-rs/tokio/blob/a5ee2f0d3d78daa01e2c6c12d22b82474dc5c32a/tokio/src/signal/unix/driver.rs#L76)
 
 当 signal driver `park` 时就会等待这个 unix socket receiver 的 IO 事件。
 
@@ -130,18 +132,19 @@ fn action(globals: Pin<&'static Globals>, signal: c_int) {
     drop(sender.write(&[1]));
 }
 ```
+[link](https://github.com/tokio-rs/tokio/blob/a5ee2f0d3d78daa01e2c6c12d22b82474dc5c32a/tokio/src/signal/unix.rs#L211)
 
 sender 被写了数据后，reactor 就会被唤醒，io driver 从 `park` 中返回，于是 signal driver 会在 `self.process()` 中通知 signal 的 listeners(`globals().broadcast()`)：
 
 ```rust
 fn process(&self) {
-	let ev = match self.receiver.registration().poll_read_ready(&mut cx) {
-	    Poll::Ready(Ok(ev)) => ev,
-	}
-	self.receiver.registration().clear_readiness(ev);
+  let ev = match self.receiver.registration().poll_read_ready(&mut cx) {
+      Poll::Ready(Ok(ev)) => ev,
+  }
+  self.receiver.registration().clear_readiness(ev);
 
-	// Broadcast any signals which were received
-	globals().broadcast();
+  // Broadcast any signals which were received
+  globals().broadcast();
 }
 ```
 
@@ -172,8 +175,9 @@ let inner = CoreDriver {
 
 Ok(Self { park, inner })
 ```
+[link](https://github.com/tokio-rs/tokio/blob/a5ee2f0d3d78daa01e2c6c12d22b82474dc5c32a/tokio/src/process/unix/driver.rs#L56)
 
-process 示例中的 `child.wait().await?` 内部其实就是异步等待 system signal，当收到 `SIGCHILD` signal 时，`child.wait().await?` 就会完成。同时，signal driver 会被唤醒而结束 `park`，于是 process driver 可以继续执行，在调用 `self.inner.process()` 时会做一些子进程的回收工作。
+process 示例中的 `child.wait().await?` 内部是异步等待 system signal，当收到 `SIGCHILD` signal 时，`child.wait().await?` 就会完成。同时，signal driver 会被唤醒而结束 `park`，于是 process driver 可以继续执行，在调用 `self.inner.process()` 时会做一些子进程的回收工作。
 
 ### Time driver
 
