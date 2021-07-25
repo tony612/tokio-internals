@@ -1,0 +1,369 @@
+<!DOCTYPE HTML>
+<html lang="cn" class="sidebar-visible no-js light">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Signal, Process 和 Time - Tokio Internals</title>
+                
+
+        <!-- Custom HTML head -->
+        
+
+        <meta content="text/html; charset=utf-8" http-equiv="Content-Type">
+        <meta name="description" content="">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff" />
+
+                <link rel="icon" href="favicon.svg">
+                        <link rel="shortcut icon" href="favicon.png">
+                <link rel="stylesheet" href="css/variables.css">
+        <link rel="stylesheet" href="css/general.css">
+        <link rel="stylesheet" href="css/chrome.css">
+                <link rel="stylesheet" href="css/print.css" media="print">
+        
+        <!-- Fonts -->
+        <link rel="stylesheet" href="FontAwesome/css/font-awesome.css">
+                <link rel="stylesheet" href="fonts/fonts.css">
+        
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" href="highlight.css">
+        <link rel="stylesheet" href="tomorrow-night.css">
+        <link rel="stylesheet" href="ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+        
+            </head>
+    <body>
+        <!-- Provide site root to javascript -->
+        <script type="text/javascript">
+            var path_to_root = "";
+            var default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "navy" : "light";
+        </script>
+
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script type="text/javascript">
+            try {
+                var theme = localStorage.getItem('mdbook-theme');
+                var sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script type="text/javascript">
+            var theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            var html = document.querySelector('html');
+            html.classList.remove('no-js')
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add('js');
+        </script>
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script type="text/javascript">
+            var html = document.querySelector('html');
+            var sidebar = 'hidden';
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            }
+            html.classList.remove('sidebar-visible');
+            html.classList.add("sidebar-" + sidebar);
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <div class="sidebar-scrollbox">
+                <ol class="chapter"><li class="chapter-item expanded "><a href="01.html"><strong aria-hidden="true">1.</strong> 介绍</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="01_intro_async.html"><strong aria-hidden="true">1.1.</strong> Rust async 简介</a></li><li class="chapter-item expanded "><a href="01_intro_tokio.html"><strong aria-hidden="true">1.2.</strong> Tokio 概览</a></li></ol></li><li class="chapter-item expanded "><a href="02.html"><strong aria-hidden="true">2.</strong> Tokio runtime 源码解读</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="02_boostrap.html"><strong aria-hidden="true">2.1.</strong> Tokio runtime 启动</a></li><li class="chapter-item expanded "><a href="02_main_thread_1.html"><strong aria-hidden="true">2.2.</strong> 主线程 - 整体逻辑和等待连接</a></li><li class="chapter-item expanded "><a href="02_main_thread_2.html"><strong aria-hidden="true">2.3.</strong> 主线程 - 处理连接，创建和调度 task</a></li><li class="chapter-item expanded "><a href="02_worker_thread_1.html"><strong aria-hidden="true">2.4.</strong> worker 线程 - reactor event loop</a></li><li class="chapter-item expanded "><a href="02_worker_thread_2.html"><strong aria-hidden="true">2.5.</strong> worker 线程 - 运行 task</a></li></ol></li><li class="chapter-item expanded "><a href="03.html"><strong aria-hidden="true">3.</strong> 专题</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="03_slab_token_readiness.html"><strong aria-hidden="true">3.1.</strong> Slab, mio token 和 readiness</a></li><li class="chapter-item expanded "><a href="03_task_scheduler.html"><strong aria-hidden="true">3.2.</strong> Task scheduler</a></li><li class="chapter-item expanded "><a href="03_signal_process_time.html" class="active"><strong aria-hidden="true">3.3.</strong> Signal, Process 和 Time</a></li></ol></li></ol>            </div>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle"></div>
+        </nav>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                
+                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky bordered">
+                    <div class="left-buttons">
+                        <button id="sidebar-toggle" class="icon-button" type="button" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </button>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light (default)</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                                                <button id="search-toggle" class="icon-button" type="button" title="Search. (Shortkey: s)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="S" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                                            </div>
+
+                    <h1 class="menu-title">Tokio Internals</h1>
+
+                    <div class="right-buttons">
+                                                <a href="print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                                                                        <a href="https://github.com/tony612/tokio-internals" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+                                                
+                    </div>
+                </div>
+
+                                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+                
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script type="text/javascript">
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="signal-process-和-time"><a class="header" href="#signal-process-和-time">Signal, Process 和 Time</a></h1>
+<p>我们之前在讲 Tokio runtime 的时候为了简化，特地关掉了 <a href="https://docs.rs/tokio/1.7.1/tokio/time/index.html"><code>time</code></a>, <a href="https://docs.rs/tokio/1.7.1/tokio/process/index.html"><code>process</code></a> 和 <a href="https://docs.rs/tokio/1.7.1/tokio/signal/index.html"><code>signal</code></a> 这三个 feature，现在来讲一下，他们分别对应三个 module，用来处理异步的时间、进程管理和信号处理。</p>
+<p>还记得在 <a href="./02_boostrap.html">2.1</a> 中讲过的 <code>runtime::driver::Driver</code> 吗？它被用来创建 <code>runtime::Parker</code>，并且在 <a href="./02_worker_thread_1.html">2.4</a> 中当 worker 没有 task 要处理而 poll events 时就会调用 <code>Parker</code> 的 <a href="https://github.com/tokio-rs/tokio/blob/a5ee2f0d3d78daa01e2c6c12d22b82474dc5c32a/tokio/src/runtime/park.rs#L92"><code>park</code> 方法</a>，在其中会进一步调用 <code>driver</code> 的 <code>park</code>:</p>
+<pre><pre class="playground"><code class="language-rust">
+<span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>driver.park()
+<span class="boring">}
+</span></code></pre></pre>
+<p><a href="https://github.com/tokio-rs/tokio/blob/a5ee2f0d3d78daa01e2c6c12d22b82474dc5c32a/tokio/src/runtime/park.rs#L136">link</a></p>
+<p>这个 driver 就是 <code>runtime::driver::Driver</code>，之前只是把它当做 <code>io::driver::Driver</code>来讲，但如果开了 <code>time</code>, <code>process</code> 和 <code>signal</code> 这三个 feature 后，Driver 其实是一个嵌套的结构：</p>
+<pre><pre class="playground"><code class="language-rust">
+<span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>runtime::driver::Driver {
+    inner: time::driver::Driver {
+        park: process::unix::driver::Driver {
+            park: signal::unix::driver::Driver {
+                park: io::Driver,
+            },
+        }
+    }
+}
+<span class="boring">}
+</span></code></pre></pre>
+<p>这里的每一层 Driver 都实现了 <code>Park</code> 这个 trait，其中包含了<code>park</code> 方法，当 runtime driver 的 <code>park</code> 被调用时，不断调用下一层的 <code>park</code>，而且逻辑也都差不多，在调用 <code>park</code> 后还会调用自己的处理逻辑。</p>
+<pre><pre class="playground"><code class="language-rust">
+<span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>impl Park for runtime::Driver::Driver {
+    fn park(&amp;mut self) -&gt; Result&lt;(), Self::Error&gt; {
+        self.inner.park()      // call time driver's park
+    }
+}
+
+impl&lt;P&gt; Park for time::driver::Driver&lt;P&gt; {
+    fn park(&amp;mut self) -&gt; Result&lt;(), Self::Error&gt; {
+        // ... preprocess for time
+        // may call self.park.park_timeout(duration)?;
+        self.park.park()?;     // call process driver's park
+
+        self.handle.process();
+    }
+}
+
+impl Park for process::unix::driver::Driver {
+    fn park(&amp;mut self) -&gt; Result&lt;(), Self::Error&gt; {
+        self.park.park()?;      // call signal driver's park
+        self.inner.process();
+        Ok(())
+    }
+}
+
+impl Park for signal::unix::driver::Driver {
+    fn park(&amp;mut self) -&gt; Result&lt;(), Self::Error&gt; {
+        self.park.park()?;      // call io driver's park
+        self.process();
+        Ok(())
+    }
+}
+
+impl Park for io::Driver {
+    fn park(&amp;mut self) -&gt; io::Result&lt;()&gt; {
+        self.turn(None)?;
+        Ok(())
+    }
+}
+<span class="boring">}
+</span></code></pre></pre>
+<p>嵌套的 driver 形成了依赖关系，最底层的 io driver 最基础的，signal 依赖 IO，process 依赖 signal，time 有点不太一样，其实是依赖 IO。</p>
+<h2 id="signal-driver"><a class="header" href="#signal-driver">Signal driver</a></h2>
+<p>我们从底向上，先来看 signal driver。</p>
+<h3 id="signal-注册-io-事件"><a class="header" href="#signal-注册-io-事件">Signal 注册 IO 事件</a></h3>
+<p>在 signal driver 创建时，会创建一个 unix stream socket，获得 receiver 和 sender，并且通过 mio 向 epoll/kqueue 注册 io 事件：</p>
+<pre><pre class="playground"><code class="language-rust">
+<span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>let (receiver, sender) = UnixStream::pair()
+
+let receiver = PollEvented::new_with_interest_and_handle(
+    receiver,
+    Interest::READABLE | Interest::WRITABLE,
+    park.handle(),
+)?;
+<span class="boring">}
+</span></code></pre></pre>
+<p><a href="https://github.com/tokio-rs/tokio/blob/a5ee2f0d3d78daa01e2c6c12d22b82474dc5c32a/tokio/src/signal/unix/driver.rs#L76">link</a></p>
+<p>当 signal driver <code>park</code> 时就会等待这个 unix socket receiver 的 IO 事件。</p>
+<p>再来看 signal 订阅事件（类似于 TcpListener 的 <code>accept</code> ），以及接收 signal 广播的代码，以文档上的<a href="https://docs.rs/tokio/1.7.1/tokio/signal/index.html#examples">这个例子</a>为示：</p>
+<pre><pre class="playground"><code class="language-rust">use tokio::signal::unix::{signal, SignalKind};
+
+#[tokio::main]
+async fn main() -&gt; Result&lt;(), Box&lt;dyn std::error::Error&gt;&gt; {
+    // An infinite stream of hangup signals.
+    let mut stream = signal(SignalKind::hangup())?;
+
+    // Print whenever a HUP signal is received
+    loop {
+        stream.recv().await;
+        println!(&quot;got signal HUP&quot;);
+    }
+}
+</code></pre></pre>
+<p>在 <code>signal(SignalKind)</code> 中会通过 <code>signal_hook_registry</code> 这个 crate 来注册 signal callback：</p>
+<pre><pre class="playground"><code class="language-rust">
+<span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>signal_hook_registry::register(signal, move || action(globals, signal))
+
+let (tx, rx) = watch::channel(());
+Signal {
+    inner: RxFuture::new(rx),
+}
+<span class="boring">}
+</span></code></pre></pre>
+<p>并且会创建一个 <code>sync::watch::Channel</code>，channel 的 sender(tx) 会放在 thread local 中，rx 会被放在 <code>stream</code>（ <code>signal::unix::Signal</code>）中从 <code>signal</code> 调用中返回，当调用 <code>stream.recv().await</code> 时其实是调用的 <code>rx.changed().await</code> 来等待 <code>tx</code> 被写入消息。</p>
+<h3 id="signal-被唤醒"><a class="header" href="#signal-被唤醒">Signal 被唤醒</a></h3>
+<p>当收到系统 signal 时，回调函数 <code>action(globals, signal)</code> 就会被调用，并通过 <code>sender</code> 向之前的 unix socket 写数据：</p>
+<pre><pre class="playground"><code class="language-rust">
+<span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>fn action(globals: Pin&lt;&amp;'static Globals&gt;, signal: c_int) {
+    globals.record_event(signal as EventId);
+
+    let mut sender = &amp;globals.sender;
+    drop(sender.write(&amp;[1]));
+}
+<span class="boring">}
+</span></code></pre></pre>
+<p><a href="https://github.com/tokio-rs/tokio/blob/a5ee2f0d3d78daa01e2c6c12d22b82474dc5c32a/tokio/src/signal/unix.rs#L211">link</a></p>
+<p>sender 被写了数据后，reactor 就会被唤醒，io driver 从 <code>park</code> 中返回，于是 signal driver 会在 <code>self.process()</code> 中通知 signal 的 listeners(<code>globals().broadcast()</code>)：</p>
+<pre><pre class="playground"><code class="language-rust">
+<span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>fn process(&amp;self) {
+  let ev = match self.receiver.registration().poll_read_ready(&amp;mut cx) {
+      Poll::Ready(Ok(ev)) =&gt; ev,
+  }
+  self.receiver.registration().clear_readiness(ev);
+
+  // Broadcast any signals which were received
+  globals().broadcast();
+}
+<span class="boring">}
+</span></code></pre></pre>
+<p><code>globals().broadcast()</code> 中其实就是调用 <code>tx.send()</code> 来通知 <code>stream.recv().await</code> 继续。</p>
+<h2 id="process-driver"><a class="header" href="#process-driver">Process driver</a></h2>
+<p>先来看下异步 process 的基本用法：</p>
+<pre><pre class="playground"><code class="language-rust">
+<span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>let mut child = Command::new(&quot;echo&quot;).arg(&quot;hello&quot;).spawn()
+        .expect(&quot;failed to spawn&quot;);
+
+// Await until the command completes
+let status = child.wait().await?;
+<span class="boring">}
+</span></code></pre></pre>
+<p>Command 用法和标准库中的 Command 基本一致，只是提供了接口来异步地等到子进程执行完成。</p>
+<p>process driver 之所以依赖 signal 是因为 process 其实在创建时订阅了 <code>libc::SIGCHLD</code> 事件：</p>
+<pre><pre class="playground"><code class="language-rust">
+<span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>let sigchild = signal_with_handle(SignalKind::child(), park.handle())?;
+let inner = CoreDriver {
+    sigchild,
+    orphan_queue: GlobalOrphanQueue,
+};
+
+Ok(Self { park, inner })
+<span class="boring">}
+</span></code></pre></pre>
+<p><a href="https://github.com/tokio-rs/tokio/blob/a5ee2f0d3d78daa01e2c6c12d22b82474dc5c32a/tokio/src/process/unix/driver.rs#L56">link</a></p>
+<p>process 示例中的 <code>child.wait().await?</code> 内部是异步等待 system signal，当收到 <code>SIGCHILD</code> signal 时，<code>child.wait().await?</code> 就会完成。同时，signal driver 会被唤醒而结束 <code>park</code>，于是 process driver 可以继续执行，在调用 <code>self.inner.process()</code> 时会做一些子进程的回收工作。</p>
+<h3 id="time-driver"><a class="header" href="#time-driver">Time driver</a></h3>
+<p>Tokio 的 time 模块提供了异步的时间处理函数，比如 <code>sleep(Duration::from_millis(100)).await</code>。为了能在未来某个时间点处理相关的任务，time driver 会调用 <code>park_timeout</code>，io driver 在 poll events 时会传入 timeout，即使没有收到 io 事件，也会在 timeout 后被唤醒。time driver 的 <code>park_timeout</code> 调用返回后，会调用自己的处理方法，来唤醒任务（具体逻辑这里先不展开，本质上和 signal 和 process 的差不多）。</p>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                                                    <a rel="prev" href="03_task_scheduler.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+                        
+                        
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                                    <a rel="prev" href="03_task_scheduler.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+                
+                            </nav>
+
+        </div>
+
+        
+        
+        
+                <script type="text/javascript">
+            window.playground_copyable = true;
+        </script>
+        
+        
+                <script src="elasticlunr.min.js" type="text/javascript" charset="utf-8"></script>
+        <script src="mark.min.js" type="text/javascript" charset="utf-8"></script>
+        <script src="searcher.js" type="text/javascript" charset="utf-8"></script>
+        
+        <script src="clipboard.min.js" type="text/javascript" charset="utf-8"></script>
+        <script src="highlight.js" type="text/javascript" charset="utf-8"></script>
+        <script src="book.js" type="text/javascript" charset="utf-8"></script>
+
+        <!-- Custom JS scripts -->
+        
+        
+    </body>
+</html>

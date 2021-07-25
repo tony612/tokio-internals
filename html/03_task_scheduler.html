@@ -1,0 +1,342 @@
+<!DOCTYPE HTML>
+<html lang="cn" class="sidebar-visible no-js light">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Task scheduler - Tokio Internals</title>
+                
+
+        <!-- Custom HTML head -->
+        
+
+        <meta content="text/html; charset=utf-8" http-equiv="Content-Type">
+        <meta name="description" content="">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff" />
+
+                <link rel="icon" href="favicon.svg">
+                        <link rel="shortcut icon" href="favicon.png">
+                <link rel="stylesheet" href="css/variables.css">
+        <link rel="stylesheet" href="css/general.css">
+        <link rel="stylesheet" href="css/chrome.css">
+                <link rel="stylesheet" href="css/print.css" media="print">
+        
+        <!-- Fonts -->
+        <link rel="stylesheet" href="FontAwesome/css/font-awesome.css">
+                <link rel="stylesheet" href="fonts/fonts.css">
+        
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" href="highlight.css">
+        <link rel="stylesheet" href="tomorrow-night.css">
+        <link rel="stylesheet" href="ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+        
+            </head>
+    <body>
+        <!-- Provide site root to javascript -->
+        <script type="text/javascript">
+            var path_to_root = "";
+            var default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "navy" : "light";
+        </script>
+
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script type="text/javascript">
+            try {
+                var theme = localStorage.getItem('mdbook-theme');
+                var sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script type="text/javascript">
+            var theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            var html = document.querySelector('html');
+            html.classList.remove('no-js')
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add('js');
+        </script>
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script type="text/javascript">
+            var html = document.querySelector('html');
+            var sidebar = 'hidden';
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            }
+            html.classList.remove('sidebar-visible');
+            html.classList.add("sidebar-" + sidebar);
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <div class="sidebar-scrollbox">
+                <ol class="chapter"><li class="chapter-item expanded "><a href="01.html"><strong aria-hidden="true">1.</strong> 介绍</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="01_intro_async.html"><strong aria-hidden="true">1.1.</strong> Rust async 简介</a></li><li class="chapter-item expanded "><a href="01_intro_tokio.html"><strong aria-hidden="true">1.2.</strong> Tokio 概览</a></li></ol></li><li class="chapter-item expanded "><a href="02.html"><strong aria-hidden="true">2.</strong> Tokio runtime 源码解读</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="02_boostrap.html"><strong aria-hidden="true">2.1.</strong> Tokio runtime 启动</a></li><li class="chapter-item expanded "><a href="02_main_thread_1.html"><strong aria-hidden="true">2.2.</strong> 主线程 - 整体逻辑和等待连接</a></li><li class="chapter-item expanded "><a href="02_main_thread_2.html"><strong aria-hidden="true">2.3.</strong> 主线程 - 处理连接，创建和调度 task</a></li><li class="chapter-item expanded "><a href="02_worker_thread_1.html"><strong aria-hidden="true">2.4.</strong> worker 线程 - reactor event loop</a></li><li class="chapter-item expanded "><a href="02_worker_thread_2.html"><strong aria-hidden="true">2.5.</strong> worker 线程 - 运行 task</a></li></ol></li><li class="chapter-item expanded "><a href="03.html"><strong aria-hidden="true">3.</strong> 专题</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="03_slab_token_readiness.html"><strong aria-hidden="true">3.1.</strong> Slab, mio token 和 readiness</a></li><li class="chapter-item expanded "><a href="03_task_scheduler.html" class="active"><strong aria-hidden="true">3.2.</strong> Task scheduler</a></li><li class="chapter-item expanded "><a href="03_signal_process_time.html"><strong aria-hidden="true">3.3.</strong> Signal, Process 和 Time</a></li></ol></li></ol>            </div>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle"></div>
+        </nav>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                
+                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky bordered">
+                    <div class="left-buttons">
+                        <button id="sidebar-toggle" class="icon-button" type="button" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </button>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light (default)</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                                                <button id="search-toggle" class="icon-button" type="button" title="Search. (Shortkey: s)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="S" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                                            </div>
+
+                    <h1 class="menu-title">Tokio Internals</h1>
+
+                    <div class="right-buttons">
+                                                <a href="print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                                                                        <a href="https://github.com/tony612/tokio-internals" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+                                                
+                    </div>
+                </div>
+
+                                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+                
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script type="text/javascript">
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="task-scheduler"><a class="header" href="#task-scheduler">Task scheduler</a></h1>
+<p>选择合适的 task 来运行是调度器非常重要的一个逻辑，如果处理不好，可能会使调度很慢，也可能会使不同的 task 没有被公平地执行，甚至有些 tasks 可能一直得不到执行。我们来看一下 tokio 中是怎么解决这些问题的。</p>
+<h2 id="各种-run-queue"><a class="header" href="#各种-run-queue">各种 run queue</a></h2>
+<p>我们来看 Tokio 中取下一个 task（<code>next_task</code>）以及 <code>steal_task</code> 的代码：</p>
+<pre><pre class="playground"><code class="language-rust">
+<span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// core.next_task:
+fn next_task(&amp;mut self, worker: &amp;Worker) -&gt; Option&lt;Notified&gt; {
+    if self.tick % GLOBAL_POLL_INTERVAL == 0 {
+        worker.inject().pop().or_else(|| self.next_local_task())
+    } else {
+        self.next_local_task().or_else(|| worker.inject().pop())
+    }
+}
+
+--------------------------
+// self.next_local_task:
+fn next_local_task(&amp;mut self) -&gt; Option&lt;Notified&gt; {
+    self.lifo_slot.take().or_else(|| self.run_queue.pop())
+}
+
+--------------------------
+// core.steal_work:
+let num = worker.shared.remotes.len();
+let start = self.rand.fastrand_n(num as u32) as usize;
+
+for i in 0..num {
+    let i = (start + i) % num;
+
+    // Don't steal from ourself! We know we don't have work.
+    if i == worker.index {
+        continue;
+    }
+
+    let target = &amp;worker.shared.remotes[i];
+    if let Some(task) = target.steal.steal_into(&amp;mut self.run_queue) {
+        return Some(task);
+<span class="boring">}
+</span></code></pre></pre>
+<p><a href="https://github.com/tokio-rs/tokio/blob/a5ee2f0d3d78daa01e2c6c12d22b82474dc5c32a/tokio/src/runtime/thread_pool/worker.rs#L447">link</a></p>
+<p>可以看到，Worker 会从多个地方取 task，按顺序依次是：</p>
+<ol>
+<li>
+<p>LIFO slot</p>
+</li>
+<li>
+<p>自己的 local queue</p>
+</li>
+<li>
+<p>global queue</p>
+</li>
+<li>
+<p>从其他 worker 的 queue(remotes) 中 steal 任务</p>
+</li>
+</ol>
+<p><img src="./assets/03_scheduler.png" alt="" />
+<a href="https://excalidraw.com/#json=4729047296770048,XgEpCO1t7wCLne3H8sStnA">link</a></p>
+<p>Global queue 肯定需要，但如果只有一个 global queue，每个 worker 从其中取 task 时，都需要加锁，会影响性能。因此给每个 worker 增加自己的 local queue 是很自然的选择，worker 可以优先从自己的 local queue 中取任务。</p>
+<p>global 和 local 这两种 queue 都是 FIFO 的，这对于公平性很好，先到先得嘛，但不好的地方是 locality 带来的性能，每个 task 切换执行时，之前 CPU 的缓存就没用了。LIFO slot 就是为了改善这种问题的，它 （似乎）是从 Go 里借鉴来的一个机制，可以解决一些场景 locality 问题。除非是 task 主动 yield，否则当 task 被调度时，会优先考虑放到 LIFO slot（相当于是 queue 的最前边），这个 task 会被优先执行。</p>
+<p>比如在一个 task 中 spawn 了另外一个 task，并且有一些变量需要被 move 到新的 task 中，这时如果新的这个 task 能够先被运行的话，这些变量在 CPU 中的缓存就能得到有效利用。Tokio 代码中还提到了 LIFO 可以减少 message passing 中的延迟。比如，当一个 task 向另一个 task 通过 <a href="https://docs.rs/tokio/1.7.0/tokio/sync/index.html">channel</a> 发消息，如果 task 收到消息后可以先被执行，就可以减少因为在 run queue 中排队带来的延迟。</p>
+<p>LIFO 可以带来更好的性能，但也会牺牲公平性，因此 LIFO slot 目前只有一个，当这个 LIFO slot 已被占用时，原来的任务就会被转移到 run queue 末尾，而新的 task 则会被放在 LIFO slot 中。LIFO slot 对于性能和公平性，可以实现一定程度上的平衡。</p>
+<p>任务的窃取也是调度器中常见的机制，当 global 和 local queue 中都没有 task 可以执行，就会尝试去 &quot;steal&quot; 其他 worker 的任务，这样可以平衡不同 worker 的任务量。Tokio 会随机挑一个 worker 开始尝试窃取，并且会窃取一半的任务，如果那个 worker 也没有任务，就会尝试窃取下一个 worker。不过 LIFO slot 的任务并不会被窃取。</p>
+<h2 id="starvation-问题"><a class="header" href="#starvation-问题">Starvation 问题</a></h2>
+<p>虽然不同类型的 queue 和 work stealing 机制可以带来不错的性能和公平性，但还不够，tasks 依然可能会被“饿死”（starvation）。下边描述了几种常见的场景，和 Tokio 中的解决方法。</p>
+<h3 id="一个-task-执行过久"><a class="header" href="#一个-task-执行过久">一个 task 执行过久</a></h3>
+<p>如果一个 task 执行很久，最坏情况是进入了死循环，那当前 worker 的 queue 中的 tasks 就要等待更长时间才能得到执行，甚至是一直不会被执行。我们知道，目前 Rust runtime 中无法抢占式调度（preempt）这样的 task，主要还是需要开发者自己进行代码“协同”。</p>
+<p>但 Tokio 也有机制来改善这类问题，比如在 <a href="./02_worker_thread_2.html">2.5</a> 见过的 <a href="https://github.com/tokio-rs/tokio/blob/a5ee2f0d3d78daa01e2c6c12d22b82474dc5c32a/tokio/src/coop.rs#L3"><code>coop</code></a> module，在 task 运行之前会调用</p>
+<pre><pre class="playground"><code class="language-rust">
+<span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>coop::budget(|| {
+})
+<span class="boring">}
+</span></code></pre></pre>
+<p>它会创建一个 thread local 的 counter，目前初始值是 128。调用 <code>coop::poll_proceed</code> 会把 counter 减 1，当减小到 0 时，就会返回 Pending。而 Tokio 中在 poll 之前都会先调用 <code>coop::poll_proceed</code> 来判断是否超过 budget，如果超过，就会直接返回而不会调用实际的 poll。比如 <a href="./02_worker_thread_2.html">2.5</a> 中提过的 <code>poll_ready</code> 以及 <a href="https://docs.rs/tokio/0.1.16/tokio/sync/mpsc/index.html"><code>tokio mpsc</code></a> recv 等方法里都调用了它。</p>
+<p>不过即便是有 <code>coop</code> ，如果是纯 CPU 的计算，Tokio 没办法了。当然这种还是用 <a href="https://docs.rs/tokio/0.2.22/tokio/task/fn.spawn_blocking.html"><code>tokio::task::spawn_blocking</code></a> 比较好。</p>
+<h3 id="global-queue-中的任务被饿死"><a class="header" href="#global-queue-中的任务被饿死">Global queue 中的任务被饿死</a></h3>
+<p>因为 local queue 中任务的优先级比 global queue 要高，如果一个 task 一直没有执行结束，比如一个 TCP server 的连接不停有新的数据从 client 发过来，于是它不停被挂起、放在队列、运行，这样 global queue 的任务就一直得不到运行。</p>
+<p>Tokio 会用 worker 的 tick（和 <a href="./03_slab_token_readiness.html">3.1</a> 的 driver tick 不同）来记录 worker 在循环中运行的次数，在运行 task 或者 park 之前就会把 tick 加 1。而当取 task 时，就会判断是否运行了一定次数，是的话，就会从先从 global queue 中取 task 来运行，其实就是本章第一段代码。<code>GLOBAL_POLL_INTERVAL</code> 目前取值是 61，是<a href="https://github.com/tokio-rs/tokio/blob/a5ee2f0d3d78daa01e2c6c12d22b82474dc5c32a/tokio/src/runtime/thread_pool/worker.rs#L273">从 Go 中 copy 来的</a>。</p>
+<pre><pre class="playground"><code class="language-rust">
+<span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>fn next_task(&amp;mut self, worker: &amp;Worker) -&gt; Option&lt;Notified&gt; {
+    if self.tick % GLOBAL_POLL_INTERVAL == 0 {
+        worker.inject().pop().or_else(|| self.next_local_task())
+    } else {
+        self.next_local_task().or_else(|| worker.inject().pop())
+    }
+}
+<span class="boring">}
+</span></code></pre></pre>
+<h3 id="lifo-slot-导致的饿死"><a class="header" href="#lifo-slot-导致的饿死">LIFO slot 导致的饿死</a></h3>
+<p>LIFO slot 因为改变了 task 的优先级，就可能会导致其他任务被饿死。有一种可能是，一个 worker 中的两个 task 一直在互相发消息，这两个 task 就会一直在 LIFO slot 中，导致 local queue 的任务得不到执行，<a href="https://github.com/tokio-rs/tokio/blob/a5ee2f0d3d78daa01e2c6c12d22b82474dc5c32a/tokio/tests/rt_common.rs#L1049">有个测试用例</a> 专门来测试这种场景。Tokio 的解决方法是，对 LIFO slot 做了特殊处理：</p>
+<pre><pre class="playground"><code class="language-rust">
+<span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>coop::budget(|| {
+    task.run();
+
+    // As long as there is budget remaining and a task exists in the
+    // `lifo_slot`, then keep running.
+    loop {
+        // Check for a task in the LIFO slot
+        let task = match core.lifo_slot.take() {
+            Some(task) =&gt; task,
+            None =&gt; return Ok(core),
+        };
+
+        if coop::has_budget_remaining() {
+            // Run the LIFO task, then loop
+            *self.core.borrow_mut() = Some(core);
+            task.run();
+        } else {
+            // Not enough budget left to run the LIFO task, push it to
+            // the back of the queue and return.
+            core.run_queue.push_back(task, self.worker.inject());
+            return Ok(core);
+        }
+    }
+})
+<span class="boring">}
+</span></code></pre></pre>
+<p><a href="https://github.com/tokio-rs/tokio/blob/a5ee2f0d3d78daa01e2c6c12d22b82474dc5c32a/tokio/src/runtime/thread_pool/worker.rs#L348">link</a></p>
+<p>一个任务执行后，不会回到之前的 <code>next_task</code>的地方，而是直接看 LIFO slot 中是否有任务可以执行，有就执行 LIFO slot 任务，没有就返回。但这个逻辑是放在一个 <code>coop::budget</code> 调用里的，当没有剩余 budget 时，就把 LIFO 的任务放到 run queue 末尾，从而避免了一直循环执行这两个 LIFO slot 的任务。</p>
+<h3 id="event-poll-被饿死"><a class="header" href="#event-poll-被饿死">Event poll 被饿死</a></h3>
+<p>之前说过 Tokio 的 worker 会优先执行 run queue 中的 tasks，当没有任务可执行时，会在 <code>park</code>中 poll events。问题很明显，如果 run queue 一直没有执行完，就不会 poll events。Tokio 用了和 Global queue 饿死问题一样的方案，在取 task 之前，会在 <code>maintenance</code> 里先判断 worker 的 tick 是否运行了 <code>GLOBAL_POLL_INTERVAL</code> 次，是的话就强制 <code>park</code>。</p>
+<pre><pre class="playground"><code class="language-rust">fn maintenance(&amp;self, mut core: Box&lt;Core&gt;) -&gt; Box&lt;Core&gt; {
+    if core.tick % GLOBAL_POLL_INTERVAL == 0 {
+        // Call `park` with a 0 timeout. This enables the I/O driver, timer, ...
+        // to run without actually putting the thread to sleep.
+        core = self.park_timeout(core, Some(Duration::from_millis(0)));
+
+        // Run regularly scheduled maintenance
+        core.maintenance(&amp;self.worker);
+    }
+
+    core
+}
+</code></pre></pre>
+<p>注意这里调用了 <code>park_timeout</code>，并且超时时间为 <code>0</code>，如果当前没有事件的话，就会直接返回，继续执行 tasks，不会等在这里。</p>
+<h2 id="总结"><a class="header" href="#总结">总结</a></h2>
+<p>Tokio 用了几种不同的 queue，分别解决了不同的问题，并且针对可能出现的 starvation 做了预防。可以看到，虽然并非完美，但 Tokio 在尽力平衡性能、公平性，并且还在不断被优化。</p>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                                                    <a rel="prev" href="03_slab_token_readiness.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+                        
+                                                    <a rel="next" href="03_signal_process_time.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+                        
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                                    <a rel="prev" href="03_slab_token_readiness.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+                
+                                    <a rel="next" href="03_signal_process_time.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+                            </nav>
+
+        </div>
+
+        
+        
+        
+                <script type="text/javascript">
+            window.playground_copyable = true;
+        </script>
+        
+        
+                <script src="elasticlunr.min.js" type="text/javascript" charset="utf-8"></script>
+        <script src="mark.min.js" type="text/javascript" charset="utf-8"></script>
+        <script src="searcher.js" type="text/javascript" charset="utf-8"></script>
+        
+        <script src="clipboard.min.js" type="text/javascript" charset="utf-8"></script>
+        <script src="highlight.js" type="text/javascript" charset="utf-8"></script>
+        <script src="book.js" type="text/javascript" charset="utf-8"></script>
+
+        <!-- Custom JS scripts -->
+        
+        
+    </body>
+</html>

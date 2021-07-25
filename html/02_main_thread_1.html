@@ -1,0 +1,400 @@
+<!DOCTYPE HTML>
+<html lang="cn" class="sidebar-visible no-js light">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>主线程 - 整体逻辑和等待连接 - Tokio Internals</title>
+                
+
+        <!-- Custom HTML head -->
+        
+
+        <meta content="text/html; charset=utf-8" http-equiv="Content-Type">
+        <meta name="description" content="">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff" />
+
+                <link rel="icon" href="favicon.svg">
+                        <link rel="shortcut icon" href="favicon.png">
+                <link rel="stylesheet" href="css/variables.css">
+        <link rel="stylesheet" href="css/general.css">
+        <link rel="stylesheet" href="css/chrome.css">
+                <link rel="stylesheet" href="css/print.css" media="print">
+        
+        <!-- Fonts -->
+        <link rel="stylesheet" href="FontAwesome/css/font-awesome.css">
+                <link rel="stylesheet" href="fonts/fonts.css">
+        
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" href="highlight.css">
+        <link rel="stylesheet" href="tomorrow-night.css">
+        <link rel="stylesheet" href="ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+        
+            </head>
+    <body>
+        <!-- Provide site root to javascript -->
+        <script type="text/javascript">
+            var path_to_root = "";
+            var default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "navy" : "light";
+        </script>
+
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script type="text/javascript">
+            try {
+                var theme = localStorage.getItem('mdbook-theme');
+                var sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script type="text/javascript">
+            var theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            var html = document.querySelector('html');
+            html.classList.remove('no-js')
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add('js');
+        </script>
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script type="text/javascript">
+            var html = document.querySelector('html');
+            var sidebar = 'hidden';
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            }
+            html.classList.remove('sidebar-visible');
+            html.classList.add("sidebar-" + sidebar);
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <div class="sidebar-scrollbox">
+                <ol class="chapter"><li class="chapter-item expanded "><a href="01.html"><strong aria-hidden="true">1.</strong> 介绍</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="01_intro_async.html"><strong aria-hidden="true">1.1.</strong> Rust async 简介</a></li><li class="chapter-item expanded "><a href="01_intro_tokio.html"><strong aria-hidden="true">1.2.</strong> Tokio 概览</a></li></ol></li><li class="chapter-item expanded "><a href="02.html"><strong aria-hidden="true">2.</strong> Tokio runtime 源码解读</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="02_boostrap.html"><strong aria-hidden="true">2.1.</strong> Tokio runtime 启动</a></li><li class="chapter-item expanded "><a href="02_main_thread_1.html" class="active"><strong aria-hidden="true">2.2.</strong> 主线程 - 整体逻辑和等待连接</a></li><li class="chapter-item expanded "><a href="02_main_thread_2.html"><strong aria-hidden="true">2.3.</strong> 主线程 - 处理连接，创建和调度 task</a></li><li class="chapter-item expanded "><a href="02_worker_thread_1.html"><strong aria-hidden="true">2.4.</strong> worker 线程 - reactor event loop</a></li><li class="chapter-item expanded "><a href="02_worker_thread_2.html"><strong aria-hidden="true">2.5.</strong> worker 线程 - 运行 task</a></li></ol></li><li class="chapter-item expanded "><a href="03.html"><strong aria-hidden="true">3.</strong> 专题</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="03_slab_token_readiness.html"><strong aria-hidden="true">3.1.</strong> Slab, mio token 和 readiness</a></li><li class="chapter-item expanded "><a href="03_task_scheduler.html"><strong aria-hidden="true">3.2.</strong> Task scheduler</a></li><li class="chapter-item expanded "><a href="03_signal_process_time.html"><strong aria-hidden="true">3.3.</strong> Signal, Process 和 Time</a></li></ol></li></ol>            </div>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle"></div>
+        </nav>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                
+                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky bordered">
+                    <div class="left-buttons">
+                        <button id="sidebar-toggle" class="icon-button" type="button" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </button>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light (default)</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                                                <button id="search-toggle" class="icon-button" type="button" title="Search. (Shortkey: s)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="S" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                                            </div>
+
+                    <h1 class="menu-title">Tokio Internals</h1>
+
+                    <div class="right-buttons">
+                                                <a href="print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                                                                        <a href="https://github.com/tony612/tokio-internals" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+                                                
+                    </div>
+                </div>
+
+                                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+                
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script type="text/javascript">
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="主线程---整体逻辑和等待连接"><a class="header" href="#主线程---整体逻辑和等待连接">主线程 - 整体逻辑和等待连接</a></h1>
+<p>上一章的 <code>Runtime</code> 包含了 worker 线程的 scheduler、runtime handle 和 blocking 线程池，从 Builder 返回后，会继续执行 <code>block_on</code>。</p>
+<h2 id="主线程-loop"><a class="header" href="#主线程-loop">主线程 loop</a></h2>
+<pre><pre class="playground"><code class="language-rust">
+<span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub(crate) fn block_on&lt;F: Future&gt;(&amp;mut self, f: F) -&gt; Result&lt;&gt; {
+  let waker = self.get_unpark()?.into_waker();
+  let mut cx = Context::from_waker(&amp;waker);
+
+  pin!(f);
+
+  loop {
+      if let Ready(v) = f.as_mut().poll(&amp;mut cx) {
+          return Ok(v);
+      }
+
+      self.park()?;
+  }
+}
+
+fn park(&amp;self) {
+  m = self.condvar.wait(m).unwrap();
+}
+
+fn unpark(&amp;self) {
+  self.condvar.notify_one()
+}
+<span class="boring">}
+</span></code></pre></pre>
+<p><a href="https://github.com/tokio-rs/tokio/blob/a5ee2f0d3d78daa01e2c6c12d22b82474dc5c32a/tokio/src/park/thread.rs#L257">link</a></p>
+<p>这里其实就是 <a href="./01_intro_tokio.html">1.2</a> 图中主线程的执行流程，在循环中先通过 <code>poll</code> 执行 async main（<code>f</code>），如果执行完（Ready）就返回，表示 <code>block_on</code> 执行结束，主线程也结束并退出程序了，否则就通过 <code>park</code>等待信号量。</p>
+<p>这里的 <code>f</code> 就是 <a href="./01_intro_async.html">1.1</a> 讲的 future tree 的 root ，它的子 futures 都可以拿到这里创建的 Context。因为 poll 之前，已经把 <code>unpark</code> 转成了 waker，并放进 Context 中，所以当要唤醒 future 时，<code>unpark</code> 就会被调用，也就是通过信号量来唤醒 park 的主线程。<code>f</code> 在 echo 中是 async main，也就是主线程的主要逻辑：</p>
+<pre><pre class="playground"><code class="language-rust">
+<span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>let listener = TcpListener::bind(&amp;addr).await?;
+
+loop {
+  let (mut socket, _) = listener.accept().await?;
+
+  tokio::spawn(async move {
+    // ...
+  });
+}
+<span class="boring">}
+</span></code></pre></pre>
+<h2 id="tcplistener-bind"><a class="header" href="#tcplistener-bind">TcpListener bind</a></h2>
+<p>先来看 <code>bind</code> 和内部调用的其他函数：</p>
+<pre><pre class="playground"><code class="language-rust">
+<span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub async fn bind&lt;A: ToSocketAddrs&gt;(addr: A) -&gt; io::Result&lt;TcpListener&gt; {
+  let addrs = to_socket_addrs(addr).await?;
+
+  for addr in addrs {
+    match TcpListener::bind_addr(addr) {
+        Ok(listener) =&gt; return Ok(listener),
+        // ...
+    }
+  }
+}
+
+---------------------------
+fn bind_addr(addr: SocketAddr) -&gt; io::Result&lt;TcpListener&gt; {
+  let listener = mio::net::TcpListener::bind(addr)?;
+  TcpListener::new(listener)
+}
+
+---------------------------
+// TcpListener::new -&gt; PollEvented::new(listener):
+// https://github.com/tokio-rs/tokio/blob/a5ee2f0d3d78daa01e2c6c12d22b82474dc5c32a/tokio/src/net/tcp/listener.rs#L265
+interest = Interest::READABLE | Interest::WRITABLE;
+handle = Handle::current());  // by clone
+let shared = if let Some(inner) = handle.inner() {
+  inner.add_source(listener, interest)?
+}
+
+return TcpListener {
+  io: PollEvented {
+    io: listener,
+    registration: Registration {
+      handle: handle,
+      shared: shared
+    }
+  }
+}
+
+------------------------
+// add_source:
+// https://github.com/tokio-rs/tokio/blob/dcac336dc7206adb44c90bcfcb62cd11755a0ba1/tokio/src/io/driver/mod.rs#L320
+let (address, shared) = self.io_dispatch.allocate();
+let token = GENERATION.pack(shared.generation(), ADDRESS.pack(address.as_usize(), 0));
+
+self.registry
+    .register(source, mio::Token(token), interest.to_mio())?;
+
+Ok(shared)
+<span class="boring">}
+</span></code></pre></pre>
+<p><code>to_socket_addrs</code> 只是解析 server 地址，之所以这里加了 <code>await</code> ，是因为可能涉及到 DNS 解析，所以需要是异步的。</p>
+<p><code>bind_addr</code> 先调用了 mio 的 <code>bind</code> ，等同于 socket 的 bind+listen，返回的 mio TcpListener 会用来初始化 Tokio 的 <code>TcpListener</code>。</p>
+<p><code>TcpListener::new</code> 初始化 TcpListener 需要向 event poll 注册。这里先通过 clone 得到了之前 runtime handle 的 <code>io_handle</code>，然后用这个 io_handle 的 <code>io_dispatch</code> （<code>slab.allocator</code>) 来分配一个 <code>ScheduledIo</code> 类型的 slot，就得到了一个 <code>address</code> 和对应的 ScheduledIO <code>shared</code>，并生成了一个 <code>token</code>，然后用这个 token 来注册 event poll 来获取可读和可写事件。向 mio 注册完之后，就会返回之前申请的 ScheduledIO，它会被存放在 TcpListener 中，等收到 events 时需要用到。这个 token 的设计会在 <a href="./03_slab_token_readiness.html">3.1</a> 描述。</p>
+<p><code>listener</code> 创建完后就开始在 loop 中 accept，是常见的 TCP server 的逻辑。</p>
+<h2 id="tcplistener-accept"><a class="header" href="#tcplistener-accept">TcpListener accept</a></h2>
+<pre><pre class="playground"><code class="language-rust">
+<span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// listener.accept():
+let (mio, addr) = self.io.registration()
+            .async_io(Interest::READABLE, || self.io.accept())
+            .await?;
+<span class="boring">}
+</span></code></pre></pre>
+<p><a href="https://github.com/tokio-rs/tokio/blob/a5ee2f0d3d78daa01e2c6c12d22b82474dc5c32a/tokio/src/net/tcp/listener.rs#L149">link</a></p>
+<p>accept 里调用了一个异步的函数 <code>async_io</code> 以及它的 <code>await</code>。我们来看 <code>async_io</code> ，先只看等待连接建立这部分：</p>
+<pre><pre class="playground"><code class="language-rust">
+<span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// async fn async_io:
+loop {
+    let event = self.readiness(interest).await?;
+
+    // ... after listener is ready to accept
+}
+
+------------------------------
+// self.readiness(interest):
+Readiness {
+    scheduled_io: self,
+    state: State::Init,
+    waiter: UnsafeCell::new(Waiter {
+        interest,
+        ...
+    }),
+}
+<span class="boring">}
+</span></code></pre></pre>
+<p><a href="https://github.com/tokio-rs/tokio/blob/a5ee2f0d3d78daa01e2c6c12d22b82474dc5c32a/tokio/src/io/driver/registration.rs#L248">link</a></p>
+<p><code>readiness(interest)</code> 返回的是一个 Readiness struct，调用它的 <code>.await?</code> 时，Rust 会生成状态机代码，并调用 Readiness 实现的 Future trait 的 poll 方法。它的 <code>poll</code> 有点复杂，简化后如下：</p>
+<pre><pre class="playground"><code class="language-rust">
+<span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>loop {
+  match *state {
+    State::Init =&gt; {
+        let curr = self.scheduled_io.readiness.load(SeqCst);
+        let mut ready = Ready::from_usize(READINESS.unpack(curr));
+
+        let ready = ready.intersection(interest);
+
+        if !ready.is_empty() {
+            // Currently ready!
+            ...
+            return Pool::Ready(...);
+        }
+
+        // Not ready
+        (*waiter.get()).waker = Some(cx.waker().clone());
+        waiters.list.push_front(unsafe { NonNull::new_unchecked(waiter.get()) });
+        *state = State::Waiting;
+    }
+    State::Waiting =&gt; {
+        let w = unsafe { &amp;mut *waiter.get() };
+
+        if w.is_ready {
+            *state = State::Done;
+        } else {
+            // Update the waker, if necessary.
+            if !w.waker.as_ref().unwrap().will_wake(cx.waker()) {
+                w.waker = Some(cx.waker().clone());
+            }
+
+            return Poll::Pending;
+        }
+    }
+  }
+}
+<span class="boring">}
+</span></code></pre></pre>
+<p><a href="https://github.com/tokio-rs/tokio/blob/a5ee2f0d3d78daa01e2c6c12d22b82474dc5c32a/tokio/src/io/driver/scheduled_io.rs#L423">link</a></p>
+<p>Readiness 的初始状态为 <code>Init</code>，于是这里会先判断是不是 ready，一般刚创建时还没有 ready，于是把 <code>waker</code> 设置为 Context 中的 waker，Context 就是在本章开头 <code>block_on</code> 调用中被传入 root future 的。其中， <code>scheduled_io.readiness</code> 表示某个  token 是否 ready。（在 <a href="./03_slab_token_readiness.html">3.1</a> 会讲 readiness 数据结构）</p>
+<p>然后改变状态为 Waiting，并返回 <code>Poll::Pending</code>。Pending 会一直向上返回到 <code>async_io</code>，再到 <code>listener.accept</code>，最终到这一章第一段代码：</p>
+<pre><pre class="playground"><code class="language-rust">
+<span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>loop {
+    if let Ready(v) = f.as_mut().poll(&amp;mut cx) {  // poll returns Pending
+        return Ok(v);
+    }
+
+    self.park()?;
+}
+<span class="boring">}
+</span></code></pre></pre>
+<p>因为 <code>f.as_mut().poll</code> 返回了 <code>Pending</code>，于是这里就往后执行 <code>park()</code>，也就是之前看过的 <code>self.condvar.wait</code>，于是主线程就进入了休眠，等待被 reactor 唤醒。</p>
+<h2 id="总结"><a class="header" href="#总结">总结</a></h2>
+<p>可以简单用下图来总结目前的代码，主线程先 poll async main，然后在其中执行 bind 和 accept，bind 中会向 event loop 注册，accept 会 poll async_io，这时返回了 Pending，并向上经过 async main 返回到了 block_on 中，block_on 于是开始 park。</p>
+<p>之后会被 event 唤醒，并回到 async_io 的地方继续执行代码，让我们在后边的章节中讲。</p>
+<p><img src="./assets/02_main_1.png" alt="" />
+<a href="https://excalidraw.com/#json=5447525397954560,CMZtdGlx2p_gDAownksCwQ">link</a></p>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                                                    <a rel="prev" href="02_boostrap.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+                        
+                                                    <a rel="next" href="02_main_thread_2.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+                        
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                                    <a rel="prev" href="02_boostrap.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+                
+                                    <a rel="next" href="02_main_thread_2.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+                            </nav>
+
+        </div>
+
+        
+        
+        
+                <script type="text/javascript">
+            window.playground_copyable = true;
+        </script>
+        
+        
+                <script src="elasticlunr.min.js" type="text/javascript" charset="utf-8"></script>
+        <script src="mark.min.js" type="text/javascript" charset="utf-8"></script>
+        <script src="searcher.js" type="text/javascript" charset="utf-8"></script>
+        
+        <script src="clipboard.min.js" type="text/javascript" charset="utf-8"></script>
+        <script src="highlight.js" type="text/javascript" charset="utf-8"></script>
+        <script src="book.js" type="text/javascript" charset="utf-8"></script>
+
+        <!-- Custom JS scripts -->
+        
+        
+    </body>
+</html>
