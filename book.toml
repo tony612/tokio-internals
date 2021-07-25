@@ -4,3 +4,14 @@ language = "cn"
 multilingual = false
 src = "src"
 title = "Tokio Internals"
+
+[build]
+create-missing = false
+
+[output.html]
+git-repository-url = "https://github.com/tony612/tokio-internals"
+site-url = "/tokio-internals/"
+
+[output.linkcheck]
+follow-web-links = true
+traverse-parent-directories = false
